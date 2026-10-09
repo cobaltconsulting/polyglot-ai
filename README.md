@@ -1,15 +1,12 @@
-# This project is discontinued because antrophic has been implemented remote control and better context compaction. If anyone wants to implement and improve this repo you are free to use for anything. Best regards.  
+# Polyglot-AI
+
+**Status: discontinued.** The author discontinued this project after Anthropic introduced remote control and improved context compaction. The source remains available under the [MIT license](LICENSE); there is no commitment to ongoing maintenance, new features, or future releases.
 
 [![Release](https://github.com/tugcantopaloglu/polyglot-ai/actions/workflows/release.yml/badge.svg)](https://github.com/tugcantopaloglu/polyglot-ai/actions/workflows/release.yml)
- # Polyglot-AI - multiLLM "vibing" platform
 
-Is developers done? or we are not coding anymore? Who cares. Vibe coding, hard coding (idk what that means but ok) or something else. As a developer and system engineer I always like to use new tools and experiences. So on every one or two weeks I am seeing a new model or new provider making better than previous ones. So i thought it's time to create a multi-platform fast adaptable AI coding tool. First I thought about VSCode extension but I don't like extensions or trust them. So for now this is the beautiful (arguably) solution with TUI. If you don't want to use any cloud LLM for now you can add your models with ollama. Soon I will be adding my solution to implement these local modals.
+Polyglot-AI is a Rust platform that aggregates AI coding assistants into a terminal interface. The repository includes local and client-server binaries, plus a WebSocket bridge for the [historical Expo mobile client](https://github.com/tugcantopaloglu/polyglot-ai-mobile).
 
-Btw it's written in rust because why not.
-
-Feel free to open issues and pull requests for more feautres. I will be checking them everyday.
-
-So shortly a self-hosted platform that aggregates multiple AI coding assistants into a single interface. Query Claude, Gemini, Codex, GitHub Copilot, Cursor, Perplexity, and Ollama through one unified CLI with automatic failover, rate limit handling, and context preservation across tools.
+The sections below describe the retained implementation and historical setup. Compatibility with current third-party AI tools, native mobile environments, and deployments must be validated separately.
 
 ## Table of Contents
 
@@ -78,7 +75,7 @@ Communication between client and server uses QUIC (UDP-based) with MessagePack s
 
 ### Requirements
 
-- Rust 1.75 or later (for building from source)
+- A Rust toolchain compatible with the checked-in `Cargo.lock` (the workspace does not declare a verified minimum Rust version)
 - One or more AI CLI tools installed (see [Supported Tools](#supported-tools))
 - OpenSSL (for certificate generation)
 
@@ -89,7 +86,7 @@ git clone https://github.com/tugcantopaloglu/polyglot-ai.git
 cd polyglot-ai
 
 # Build all binaries
-cargo build --release
+cargo build --locked --release
 
 # Binaries are in target/release/
 # - polyglot-local (standalone)
@@ -100,7 +97,7 @@ cargo build --release
 
 ### From Releases
 
-Download pre-built binaries from the [Releases](https://github.com/tugcantopaloglu/polyglot-ai/releases) page.
+Historical pre-built local, client, and server binaries are available on the [Releases](https://github.com/tugcantopaloglu/polyglot-ai/releases) page. The release workflow does not package `polyglot-bridge`; build that binary from source. Existing releases do not imply continued support.
 
 **Windows one-line install/update**
 
@@ -148,6 +145,8 @@ docker run -it -v ./certs:/app/certs -v ./workspace:/app/workspace polyglot-clie
 
 Or use Docker Compose:
 
+The Compose file mounts certificates from `docker/certs/` and configuration from `docker/config/server.toml` (and `client.toml` for the optional client). Create those files from the certificate setup and configuration examples before starting it.
+
 ```bash
 cd docker
 docker-compose up -d
@@ -174,6 +173,10 @@ polyglot-local ask "explain this code" --tool claude
 ### Client-Server Mode
 
 ```bash
+# From the repository root, copy and customize the example configuration
+cp config/server.example.toml config/server.toml
+cp config/client.example.toml config/client.toml
+
 # 1. Generate certificates
 ./scripts/generate-certs.sh ./certs
 
@@ -188,15 +191,17 @@ polyglot connect -c config/client.toml
 
 Expo clients cannot speak QUIC directly. Use the WebSocket bridge to connect mobile apps to a Polyglot server:
 
+Follow the [bridge setup and transport notes](crates/bridge/README.md) for certificates, access tokens, and local mode. The [mobile README](https://github.com/tugcantopaloglu/polyglot-ai-mobile/blob/main/README.md) explains connection profiles and client limitations.
+
 ```bash
 # Build the bridge
-cargo build -p polyglot-bridge --release
+cargo build --locked -p polyglot-bridge --release
 
 # Start the bridge (WS on 8787, QUIC to server on 4433)
 target/release/polyglot-bridge --listen 0.0.0.0:8787 --server 127.0.0.1:4433
 ```
 
-Point the mobile app at `ws://<host>:8787/ws` (or `wss://...` behind TLS). Set `--token` to require a shared access token.
+Server mode requires a running Polyglot server and its CA, client certificate, and client key in `./certs/`, or explicit `--ca`, `--cert`, and `--key` paths. Point the mobile app at `ws://<host>:8787/ws`, or use `wss://...` with the bridge's `--tls` option or a TLS proxy. Set `--token` to require a shared access token; it does not encrypt a plain WebSocket connection.
 
 Local-only mode (runs `polyglot-local` on the same machine):
 
@@ -252,7 +257,7 @@ theme = "default"
 
 ### Server Configuration
 
-See `config/server.example.toml` for all options.
+See [config/server.example.toml](config/server.example.toml) for all options.
 
 Key settings:
 
@@ -274,7 +279,7 @@ default_tool = "claude"
 
 ### Client Configuration
 
-See `config/client.example.toml` for all options.
+See [config/client.example.toml](config/client.example.toml) for all options.
 
 ```toml
 [connection]
@@ -352,17 +357,19 @@ Or specify tools directly:
 
 ## Supported Tools
 
-| Tool           | Command        | Installation                               |
-| -------------- | -------------- | ------------------------------------------ |
-| Claude Code    | `claude`       | `npm install -g @anthropic-ai/claude-code` |
-| Gemini CLI     | `gemini`       | See Google Cloud documentation             |
-| OpenAI Codex   | `codex`        | `npm install -g @openai/codex-cli`         |
-| GitHub Copilot | `gh copilot`   | `gh extension install github/gh-copilot`   |
-| Cursor Agent   | `cursor-agent` | Included with Cursor IDE                   |
-| Perplexity     | `pplx`         | See Perplexity documentation               |
-| Ollama         | `ollama`       | https://ollama.ai                          |
+These are the historical commands targeted by the adapters. Their presence does not establish compatibility with current vendor CLIs.
 
-Run the installation script to install available tools:
+| Tool           | Historical command |
+| -------------- | ------------------ |
+| Claude Code    | `claude`           |
+| Gemini CLI     | `gemini`           |
+| OpenAI Codex   | `codex`            |
+| GitHub Copilot | `gh copilot`       |
+| Cursor Agent   | `cursor-agent`     |
+| Perplexity     | `pplx`             |
+| Ollama         | `ollama`           |
+
+Historical tool installation scripts are retained below. Review their package names, versions, and commands against each vendor's current documentation before executing them.
 
 ```bash
 # Linux/macOS
@@ -412,7 +419,7 @@ See `scripts/generate-certs.sh` for the exact OpenSSL commands.
 
 ### Double characters when typing (Windows)
 
-This was a known issue with terminal echo on Windows. Update to the latest version which includes a fix for Windows console mode handling.
+This was a known issue with terminal echo on Windows. Compare your checkout or historical release with the console mode handling in `crates/local/src/main.rs`; no future fix release is promised.
 
 ### Tool not found
 
@@ -440,11 +447,10 @@ Polyglot-AI automatically handles rate limits by switching tools. If all tools a
 ```bash
 # Clean build
 cargo clean
-cargo build --release
-
-# Update dependencies
-cargo update
+cargo build --locked --release
 ```
+
+Record the compiler and dependency error before changing the lockfile. This discontinued project does not provide a verified minimum Rust version or a currently tested build matrix.
 
 ## Plugin System
 
@@ -476,6 +482,8 @@ timeout = 60
 
 ## Updates
 
+The updater queries existing GitHub releases. It does not indicate that new releases will be published.
+
 Check for updates:
 
 ```bash
@@ -498,6 +506,6 @@ Tugcan Topaloglu ([@tugcantopaloglu](https://github.com/tugcantopaloglu))
 
 ## Contributing
 
-Issues and pull requests welcome at https://github.com/tugcantopaloglu/polyglot-ai
+The [issue tracker and pull requests](https://github.com/tugcantopaloglu/polyglot-ai) remain available, but review and maintenance are not guaranteed for this discontinued project.
 
 
